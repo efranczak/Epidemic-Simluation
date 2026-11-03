@@ -1,9 +1,14 @@
-from models import Diffusion
+from models import SEIR
 from utility import run_realtime
 
-
 def main():
-    run_realtime(Diffusion(n=60, D=1.0), dt=0.2, v_min=0, v_max=1)
+    run_realtime(SEIR(S=9990, I=10, R=0, E=0,
+             infectionFactor=0.5,     
+             infectionPeroid=7,    
+             incubationPeroid=5,     
+             immunityPeroid=180,     
+             lethality=0.002,
+             naturalLethality=1/(70*365)))
 
 if __name__ == '__main__':
     main()
