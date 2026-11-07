@@ -15,5 +15,5 @@ def plot_heatmap(data, ax=None, im=None, cmap="viridis", vmin=None, vmax=None, t
     im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax, origin="lower", interpolation="nearest")
     if title:
         ax.set_title(title)
-    plt.colorbar(im, ax=ax)
+    ax.figure.colorbar(im, ax=ax)
     return im
