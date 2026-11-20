@@ -1,4 +1,4 @@
-import customtkinter as ctk
+import tkinter as tk
 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -6,9 +6,6 @@ import matplotlib.animation as animation
 
 from models import SEIR
 from plot import plot_heatmap
-
-ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
 
 # nazwa argumentu SEIR: (domyślna, min, max, krok)
 PARAMS = dict(
@@ -29,9 +26,9 @@ LABELS = dict(
     I="Zakażeni (I)",
     R="Ozdrowieni / odporni (R)",
     E="Zarażeni, nie zarażający innych (E)",
-    infectionFactor="Współczynnik infekcji (ɣ)",
-    infectionPeroid="Okres zakaźności [dni] (β)",
-    incubationPeroid="okres inkubacji [dni] (δ)",
+    infectionFactor="Współczynnik infekcji (β)",
+    infectionPeroid="Okres zakaźności [dni] (γ)",
+    incubationPeroid="Okres inkubacji [dni] (σ)",
     immunityPeroid="Czas odporności [dni] (ω)",
     lethality="Śmiertelność choroby (α)",
     naturalLethality="Śmiertelność naturalna [1/dzień] (μ)",
@@ -39,6 +36,9 @@ LABELS = dict(
 
 INT_PARAMS = {"S", "I", "R", "E"}
 BG = "#242424"
+PANEL = "#2b2b2b"
+FG = "#e0e0e0"
+ACCENT = "#5ab0ff"
 
 
 def fmt(name, v):
@@ -56,17 +56,17 @@ def clean(name, v):
     return round(v / step) * step
 
 
-class Window(ctk.CTk):
+class Window(tk.Tk):
     def __init__(self, dt=0.1, steps_per_frame=5, interval=30):
         super().__init__()
         self.dt, self.spf, self.interval = dt, steps_per_frame, interval
         self.model = None
-        self.im = None
         self.running = False
         self._job = None
         self._resize_job = None
-        self._busy = False          # okno jest ruszane / skalowane
+        self._busy = False
         self._busy_job = None
+        self.configure(bg=BG)
         self.title("SEIRS epidemic simulation")
         self.geometry("1150x720")
         self.init_window()
@@ -75,51 +75,60 @@ class Window(ctk.CTk):
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        panel = ctk.CTkScrollableFrame(self, width=320, corner_radius=12,
-                                       label_text="Parametry modelu")
+        panel = tk.Frame(self, bg=PANEL, width=320)
         panel.grid(row=0, column=0, sticky="ns", padx=(12, 6), pady=12)
+        panel.grid_propagate(False)
+
+        tk.Label(panel, text="Parametry modelu", bg=PANEL, fg=FG,
+                 font=("TkDefaultFont", 11, "bold")).pack(pady=(10, 4))
 
         self.entries = {}
         self.value_labels = {}
         for name, (val, lo, hi, step) in PARAMS.items():
-            row = ctk.CTkFrame(panel, fg_color="transparent")
-            row.pack(fill="x", pady=(6, 0))
-            ctk.CTkLabel(row, text=LABELS[name], anchor="w").pack(side="left")
-            vl = ctk.CTkLabel(row, text=fmt(name, val), anchor="e",
-                              text_color=("#1f6aa5", "#5ab0ff"))
+            row = tk.Frame(panel, bg=PANEL)
+            row.pack(fill="x", padx=10, pady=(6, 0))
+            tk.Label(row, text=LABELS[name], bg=PANEL, fg=FG,
+                     anchor="w").pack(side="left")
+            vl = tk.Label(row, text=fmt(name, val), bg=PANEL, fg=ACCENT,
+                          anchor="e")
             vl.pack(side="right")
 
-            s = ctk.CTkSlider(panel, from_=lo, to=hi,
-                              number_of_steps=max(1, round((hi - lo) / step)))
+            s = tk.Scale(panel, from_=lo, to=hi, resolution=step,
+                         orient="horizontal", showvalue=False,
+                         bg=PANEL, fg=FG, troughcolor=BG,
+                         highlightthickness=0, bd=0, sliderrelief="flat",
+                         activebackground=ACCENT)
             s.set(val)
-            s.pack(fill="x", pady=(2, 4))
+            s.pack(fill="x", padx=10, pady=(0, 2))
             self.entries[name] = s
             self.value_labels[name] = vl
 
-        btns = ctk.CTkFrame(panel, fg_color="transparent")
-        btns.pack(fill="x", pady=(14, 4))
-        self.buttonRun = ctk.CTkButton(btns, text="Start", command=self.toggle)
+        btns = tk.Frame(panel, bg=PANEL)
+        btns.pack(fill="x", padx=10, pady=(14, 4))
+        self.buttonRun = tk.Button(btns, text="Start", command=self.toggle,
+                                   bg="#1f6aa5", fg="white", relief="flat",
+                                   activebackground="#2a80c5", bd=0, pady=6)
         self.buttonRun.pack(side="left", expand=True, fill="x", padx=(0, 4))
-        self.buttonReset = ctk.CTkButton(btns, text="Reset", command=self.reset,
-                                         fg_color="transparent", border_width=2,
-                                         text_color=("gray10", "gray90"))
+        self.buttonReset = tk.Button(btns, text="Reset", command=self.reset,
+                                     bg=PANEL, fg=FG, relief="solid", bd=1,
+                                     activebackground="#3a3a3a", pady=6)
         self.buttonReset.pack(side="left", expand=True, fill="x", padx=(4, 0))
 
-        plot_frame = ctk.CTkFrame(self, corner_radius=12)
+        plot_frame = tk.Frame(self, bg=BG)
         plot_frame.grid(row=0, column=1, sticky="nsew", padx=(6, 12), pady=12)
 
-        self.fig = Figure(figsize=(6, 5), facecolor=BG)
-        self.ax = self.fig.add_subplot(111)
+        self.fig = Figure(figsize=(8, 7), facecolor=BG)
+        self.axes = self.fig.subplots(2, 2)
+        self.images = {}
+
         self.canvas = FigureCanvasTkAgg(self.fig, master=plot_frame)
         widget = self.canvas.get_tk_widget()
         widget.configure(bg=BG, highlightthickness=0)
         widget.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # matplotlib domyślnie przerysowuje figurę przy KAŻDYM evencie Configure
-        # -> zastępujemy to debounce'owanym resize
+        # debounce resize zamiast przerysowania przy każdym Configure
         widget.unbind("<Configure>")
         widget.bind("<Configure>", self.on_canvas_configure)
-        # ruch/skalowanie okna -> chwilowo wstrzymaj animację
         self.bind("<Configure>", self.on_window_configure)
 
         self.ani = animation.FuncAnimation(
@@ -147,15 +156,14 @@ class Window(ctk.CTk):
     def _unbusy(self):
         self._busy = False
 
-    # ---------- wygląd ----------
     def style_axes(self):
-        fg = "#e0e0e0"
-        self.ax.set_facecolor(BG)
-        self.ax.title.set_color(fg)
-        for a in self.fig.axes:                     # także colorbar
-            a.tick_params(colors=fg)
-            a.yaxis.label.set_color(fg)
-            for sp in a.spines.values():
+        for ax in self.fig.axes:
+            ax.set_facecolor(BG)
+            ax.title.set_color(FG)
+            ax.tick_params(colors=FG)
+            ax.xaxis.label.set_color(FG)
+            ax.yaxis.label.set_color(FG)
+            for sp in ax.spines.values():
                 sp.set_color("#555555")
 
     # ---------- model ----------
@@ -165,14 +173,25 @@ class Window(ctk.CTk):
     def build(self):
         self.model = SEIR(**self.read_params())
         field = self.model.get_field()
-        if self.im is None or not self.fig.axes:
-            self.fig.clear()
-            self.ax = self.fig.add_subplot(111)
-            self.im = plot_heatmap(field, ax=self.ax, cmap="inferno")
-            self.style_axes()
-        else:
-            plot_heatmap(field, im=self.im)
-        self.ax.set_title(self.model.info())
+
+        states = {
+            "S": self.model.S_VAL,
+            "E": self.model.E_VAL,
+            "I": self.model.I_VAL,
+            "R": self.model.R_VAL,
+        }
+        positions = {"S": (0, 0), "E": (0, 1), "I": (1, 0), "R": (1, 1)}
+
+        self.images = {}
+        for name, index in states.items():
+            ax = self.axes[positions[name]]
+            ax.clear()
+            data = (field == index).astype(float)
+            self.images[name] = plot_heatmap(
+                data, ax=ax, cmap="inferno", vmin=0, vmax=1, title=name)
+
+        self.style_axes()
+        self.fig.tight_layout()
         self.canvas.draw_idle()
 
     def toggle(self):
@@ -193,11 +212,22 @@ class Window(ctk.CTk):
     def animate(self, _):
         if not self.running or self.model is None or self._busy:
             return []
+
         for _ in range(self.spf):
             self.model.step(self.dt)
-        plot_heatmap(self.model.get_field(), im=self.im)
-        self.ax.set_title(self.model.info())
-        return [self.im]
+
+        field = self.model.get_field()
+        states = {
+            "S": self.model.S_VAL,
+            "E": self.model.E_VAL,
+            "I": self.model.I_VAL,
+            "R": self.model.R_VAL,
+        }
+        for name, index in states.items():
+            self.images[name].set_data((field == index).astype(float))
+
+        self.fig.suptitle(self.model.info(), color=FG)
+        return list(self.images.values())
 
     def on_param_change(self, _=None):
         for name, vl in self.value_labels.items():
