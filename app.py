@@ -117,7 +117,7 @@ class Window(tk.Tk):
         plot_frame = tk.Frame(self, bg=BG)
         plot_frame.grid(row=0, column=1, sticky="nsew", padx=(6, 12), pady=12)
 
-        self.fig = Figure(figsize=(8, 7), facecolor=BG)
+        self.fig = Figure(figsize=(8, 7), facecolor=BG, layout="constrained")
         self.axes = self.fig.subplots(2, 2)
         self.images = {}
 
@@ -174,6 +174,9 @@ class Window(tk.Tk):
         self.model = SEIR(**self.read_params())
         field = self.model.get_field()
 
+        self.fig.clear()
+        self.axes = self.fig.subplots(2, 2)
+
         states = {
             "S": self.model.S_VAL,
             "E": self.model.E_VAL,
@@ -185,14 +188,13 @@ class Window(tk.Tk):
         self.images = {}
         for name, index in states.items():
             ax = self.axes[positions[name]]
-            ax.clear()
             data = (field == index).astype(float)
             self.images[name] = plot_heatmap(
                 data, ax=ax, cmap="inferno", vmin=0, vmax=1, title=name)
 
+        self.fig.suptitle(self.model.info(), color=FG)
         self.style_axes()
-        self.fig.tight_layout()
-        self.canvas.draw_idle()
+        self.canvas.draw_idle()  
 
     def toggle(self):
         if self.running:
